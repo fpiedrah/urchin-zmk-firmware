@@ -20,11 +20,13 @@
 #include <dt-bindings/zmk/bt.h>
 #include <dt-bindings/zmk/outputs.h>
 
+// NUM is produced by a conditional on SYM + NAV. ZMK resolves overlapping
+// layers from the highest index downward, so NUM must outrank both of its
+// parents or it would never win a binding.
 #define BASE 0
 #define SYM  1
-#define NUM  2
-#define NAV  3
-#define FN   4
+#define NAV  2
+#define NUM  3
 
 // Home-row mod trigger lists: the opposite hand, plus every thumb.
 #define RIGHT_HAND 5 6 7 8 9 15 16 17 18 19 25 26 27 28 29
@@ -63,10 +65,15 @@
 			hold-trigger-on-release;
 		};
 
-		// Thumb layer-tap for NAV and SYM. Not &lt: that is
-		// tap-preferred, so the layer would only engage after the full
-		// tapping term with no early resolution. No positional
-		// restriction — both layers span both hands.
+		// Thumb layer-tap, inner thumbs only (E and space). Not &lt:
+		// that is tap-preferred, so the layer would only engage after
+		// the full tapping term with no early resolution. No positional
+		// restriction — NAV spans both hands.
+		//
+		// require-prior-idle-ms is safe now that this drives only the
+		// two NAV thumbs; SYM is a plain &mo. While it also carried SYM
+		// the property would have blocked that layer at exactly the
+		// moment you reached for it.
 		tlt: thumb_layer_tap {
 			compatible = "zmk,behavior-hold-tap";
 			#binding-cells = <2>;
@@ -74,26 +81,17 @@
 			flavor = "balanced";
 			tapping-term-ms = <200>;
 			quick-tap-ms = <175>;
-		};
-
-		// Escape / NUM thumb. Stays tap-preferred: under balanced,
-		// "Esc dd" in vim would resolve as a hold and emit Enter.
-		ltnum: layer_tap_num {
-			compatible = "zmk,behavior-hold-tap";
-			#binding-cells = <2>;
-			bindings = <&mo>, <&kp>;
-			flavor = "tap-preferred";
-			tapping-term-ms = <200>;
-			quick-tap-ms = <175>;
+			require-prior-idle-ms = <150>;
 		};
 	};
 
-	macros {
-		// macOS Option+N tilde dead key, then N -> ñ.
-		enye: enye {
-			compatible = "zmk,behavior-macro";
-			#binding-cells = <0>;
-			bindings = <&kp LA(N)>, <&kp N>;
+	// Any inner thumb plus any outer thumb reaches the numbers.
+	conditional_layers {
+		compatible = "zmk,conditional-layers";
+
+		num_layer {
+			if-layers = <SYM NAV>;
+			then-layer = <NUM>;
 		};
 	};
 
@@ -128,91 +126,94 @@
 		};
 	};
 
-	// Holding both outer thumbs reaches FN. Needs no key of its own:
-	// SYM's thumb 30 and NUM's thumb 33 are both &trans.
-	conditional_layers {
-		compatible = "zmk,conditional-layers";
-
-		fn_layer {
-			if-layers = <SYM NUM>;
-			then-layer = <FN>;
-		};
-	};
-
 	keymap {
 		compatible = "zmk,keymap";
 
 		// Ztron alphas, quotes swapped ('  at 20, " at 21) for Black's
 		// double-quoted Python strings. Home-row mods pinky-to-index:
 		// ⌥ ⇧ ⌃ ⌘, mirrored.
+		//
+		// The thumb row is two rules. Inner thumbs hold NAV and tap
+		// their own character; outer thumbs hold SYM. Either thumb of a
+		// pair gives the whole layer on both hands, so the choice is
+		// about which hand you would rather leave free. Escape and
+		// Enter are not here — they live on NAV.
 		base_layer {
 			display-name = "Base";
 			bindings = <
 			&kp Y        &kp C         &kp COMMA     &kp F        &kp EQUAL       &kp UNDER  &kp L        &kp DOT       &kp U         &kp Q
 			&hml LALT O  &hml LSHFT S  &hml LCTRL I  &hml LGUI N  &kp P           &kp D      &hmr RGUI T  &hmr RCTRL H  &hmr RSHFT A  &hmr RALT R
 			&kp SQT      &kp DQT       &kp G         &kp J        &kp B           &kp W      &kp M        &kp K         &kp LPAR      &kp RPAR
-			                                 &ltnum NUM ESC  &kp E           &tlt NAV SPACE  &tlt SYM RET
+			                                    &mo SYM  &tlt NAV E              &tlt NAV SPACE  &mo SYM
 			>;
 		};
 
-		// Hold right outer thumb. = at 4 and _ at 5 match base and NUM,
-		// so !=, +=, >=, <= never leave this layer. Bracket pairs stack
-		// in the right middle and ring columns. ¡ and ¿ are macOS
-		// Option sequences — macOS only. Position 25 is free.
+		// Hold either outer thumb. = at 4 and _ at 5 match base and
+		// NUM, so !=, +=, >=, <= never leave this layer. Bracket pairs
+		// stack in the right middle and ring columns. ¡ and ¿ are macOS
+		// Option sequences — macOS only. Positions 24 and 25 are free;
+		// ñ is the macOS Option dead key: hold right ⌥ (19), tap N,
+		// release, tap N again.
+		//
+		// The thumb row is fully transparent. The inner thumbs falling
+		// through to base's &tlt NAV is what lets SYM + NAV produce NUM.
 		sym_layer {
 			display-name = "Sym";
 			bindings = <
 			&kp HASH   &kp LA(N1)         &kp EXCL   &kp MINUS  &kp EQUAL       &kp UNDER  &kp AMPS   &kp LBKT  &kp RBKT  &kp CARET
 			&kp COLON  &kp LA(LS(FSLH))   &kp QMARK  &kp PLUS   &kp PRCNT       &kp GRAVE  &kp TILDE  &kp LBRC  &kp RBRC  &kp SEMI
-			&kp DLLR   &kp BSLH           &kp FSLH   &kp ASTRK  &enye           &none      &kp PIPE   &kp LT    &kp GT    &kp AT
-			                                   &trans  &kp E                    &kp SPACE  &trans
+			&kp DLLR   &kp BSLH           &kp FSLH   &kp ASTRK  &none           &none      &kp PIPE   &kp LT    &kp GT    &kp AT
+			                                     &trans  &trans                     &trans  &trans
 			>;
 		};
 
-		// Hold left outer thumb (escape). Numpad on the right hand, so
-		// digits are pure cross-hand. Parens live here because base 28
-		// and 29 are 3 and . on this layer. &tog NUM at 14 latches for
-		// sustained numeric entry — same key releases it. Modifiers are
-		// bound explicitly, never &trans: &trans falls through to the
-		// next active layer, not to base.
-		num_layer {
-			display-name = "Num";
-			bindings = <
-			&kp TAB    &kp BSPC   &kp LPAR   &kp RPAR  &kp EQUAL       &kp UNDER  &kp N7  &kp N8  &kp N9  &none
-			&kp LALT   &kp LSHFT  &kp LCTRL  &kp LGUI  &tog NUM        &kp RET    &kp N4  &kp N5  &kp N6  &kp COMMA
-			&kp PRCNT  &kp ASTRK  &kp MINUS  &kp PLUS  &kp FSLH        &kp N0     &kp N1  &kp N2  &kp N3  &kp DOT
-			                             &trans  &kp E                 &kp SPACE  &trans
-			>;
-		};
-
-		// Hold right inner thumb (space). Editing cluster sits on the
-		// left home row — Backspace under the index, Tab under the
-		// middle. Shift at 10 is a plain keycode so ⇧+arrow and ⇧Tab
-		// work same-hand. Clipboard keys are pre-modified, which
-		// sidesteps needing a modifier and a combo at once.
+		// Hold either inner thumb. One rule: the left hand deletes, the
+		// right hand moves. The editing keys mirror across the two
+		// index columns — 13/16 are Backspace and Enter, 14/15 are
+		// delete-word and Tab, 4/5 are Del and Esc.
+		//
+		// 10-12 and 17-19 are &trans on purpose: they resolve to base's
+		// hml / hmr, so every modifier keeps the exact position and
+		// behavior it has on base. ⌘ is therefore unavailable here — it
+		// sits on the index, which is where Backspace and Enter now
+		// are. For ⌘⏎ or ⌘⌫, hold ⌘ on base first, then the nav thumb;
+		// a held modifier persists through a layer change.
+		//
+		// Top-right row is ⌘ plus the arrow directly beneath it: line
+		// start, document end, document start, line end — same finger,
+		// larger jump. Caps Word at 25 is on the right because the left
+		// hand is deletion only. The empty left top and bottom rows are
+		// deliberate: movement stays on one hand as one coherent set.
 		nav_layer {
 			display-name = "Nav";
 			bindings = <
-			&kp LG(LEFT)  &kp LA(LEFT)  &kp LA(RIGHT)  &kp LG(RIGHT)  &caps_word      &out OUT_TOG  &kp C_VOL_DN  &kp C_VOL_UP  &kp C_MUTE  &bt BT_CLR
-			&kp LSHFT     &kp DEL       &kp TAB        &kp BSPC       &kp LA(BSPC)    &kp PG_UP     &kp LGUI      &kp LCTRL     &kp LSHFT   &kp LALT
-			&kp LG(Z)     &kp LG(X)     &kp LG(C)      &kp LG(V)      &kp LS(LG(Z))   &kp PG_DN     &kp LEFT      &kp DOWN      &kp UP      &kp RIGHT
-			                                    &kp ESC  &kp E                        &trans  &kp RET
+			&none      &none      &none      &none      &kp DEL          &kp ESC     &kp LG(LEFT)  &kp LG(DOWN)  &kp LG(UP)  &kp LG(RIGHT)
+			&trans     &trans     &trans     &kp BSPC   &kp LA(BSPC)     &kp TAB     &kp RET       &trans        &trans      &trans
+			&none      &none      &none      &none      &none            &caps_word  &kp LEFT      &kp DOWN      &kp UP      &kp RIGHT
+			                                     &trans  &trans                          &trans  &trans
 			>;
 		};
 
-		// Both outer thumbs. F-keys mirror the numpad shape exactly.
-		// Left home row keeps modifiers so ⇧F5 / ⌘F5 work. &bootloader,
-		// &sys_reset and &studio_unlock are safe here — reaching this
-		// layer takes two deliberate thumb holds. &studio_unlock is
-		// required because build.yaml sets CONFIG_ZMK_STUDIO=y.
-		fn_layer {
-			display-name = "Fn";
+		// Reached by holding one inner thumb and one outer thumb.
+		// Numpad on the right hand, so digits are pure cross-hand.
+		// Parens live here because base 28 and 29 are 3 and . on this
+		// layer. &tog NUM at 14 latches for sustained numeric entry —
+		// same key releases it. Modifiers are bound explicitly, never
+		// &trans: &trans falls through to the next active layer, not to
+		// base.
+		//
+		// Position 15 is &none, not Enter: Enter lives at NAV 16 and
+		// nowhere else. To press it mid-entry, release the outer thumb
+		// and you drop to NAV, where it is under your right index.
+		num_layer {
+			display-name = "Num";
 			bindings = <
-			&bootloader     &sys_reset  &none      &none     &none       &kp F10  &kp F7  &kp F8  &kp F9  &none
-			&kp LALT        &kp LSHFT   &kp LCTRL  &kp LGUI  &none       &kp F11  &kp F4  &kp F5  &kp F6  &none
-			&studio_unlock  &none       &none      &none     &none       &kp F12  &kp F1  &kp F2  &kp F3  &none
-			                                  &trans  &none              &none  &trans
+			&none       &none      &kp LPAR   &kp RPAR  &kp EQUAL       &kp UNDER  &kp N7  &kp N8  &kp N9  &out OUT_TOG
+			&kp LALT    &kp LSHFT  &kp LCTRL  &kp LGUI  &tog NUM        &none      &kp N4  &kp N5  &kp N6  &kp COMMA
+			&kp PRCNT   &kp ASTRK  &kp MINUS  &kp PLUS  &kp FSLH        &kp N0     &kp N1  &kp N2  &kp N3  &kp DOT
+			                             &trans  &trans                     &trans  &trans
 			>;
 		};
+
 	};
 };
