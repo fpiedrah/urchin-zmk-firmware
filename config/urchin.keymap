@@ -13,6 +13,15 @@
  * Left:  0 pinky, 1 ring, 2 middle, 3 index, 4 inner index
  * Right: 5 inner index, 6 index, 7 middle, 8 ring, 9 pinky
  * Thumbs: 30 left outer, 31 left inner, 32 right inner, 33 right outer
+ *
+ * The keymap follows four rules:
+ *
+ *   1. The thumb row is two rules. Inner thumbs hold EDIT and tap their own
+ *      character; outer thumbs hold SYMBOL. One of each gives OS; both outer
+ *      together give NUMBER.
+ *   2. Modifiers keep their alpha positions on every layer.
+ *   3. Every key lives in exactly one place.
+ *   4. Empty positions are deliberate.
  */
 
 #include <behaviors.dtsi>
@@ -20,13 +29,14 @@
 #include <dt-bindings/zmk/bt.h>
 #include <dt-bindings/zmk/outputs.h>
 
-// NUM is produced by a conditional on SYM + NAV. ZMK resolves overlapping
-// layers from the highest index downward, so NUM must outrank both of its
-// parents or it would never win a binding.
-#define BASE 0
-#define SYM  1
-#define NAV  2
-#define NUM  3
+// OS must be the highest index. It is activated on top of SYMBOL or EDIT, and
+// ZMK resolves overlapping layers from the highest index downward, so anything
+// above it would win instead and the layer would appear dead.
+#define ALPHA  0
+#define SYMBOL 1
+#define EDIT   2
+#define NUMBER 3
+#define OS     4
 
 // Home-row mod trigger lists: the opposite hand, plus every thumb.
 #define RIGHT_HAND 5 6 7 8 9 15 16 17 18 19 25 26 27 28 29
@@ -68,13 +78,13 @@
 		// Thumb layer-tap, inner thumbs only (E and space). Not &lt:
 		// that is tap-preferred, so the layer would only engage after
 		// the full tapping term with no early resolution. No positional
-		// restriction — NAV spans both hands.
+		// restriction — EDIT spans both hands.
 		//
-		// require-prior-idle-ms is safe now that this drives only the
-		// two NAV thumbs; SYM is a plain &mo. While it also carried SYM
-		// the property would have blocked that layer at exactly the
-		// moment you reached for it.
-		tlt: thumb_layer_tap {
+		// require-prior-idle-ms is safe because this drives only the
+		// two EDIT thumbs; SYMBOL is a plain &mo. While the same
+		// behavior also carried SYMBOL the property would have blocked
+		// that layer at exactly the moment you reached for it.
+		elt: edit_layer_tap {
 			compatible = "zmk,behavior-hold-tap";
 			#binding-cells = <2>;
 			bindings = <&mo>, <&kp>;
@@ -85,28 +95,32 @@
 		};
 	};
 
-	// Any inner thumb plus any outer thumb reaches the numbers.
-	conditional_layers {
-		compatible = "zmk,conditional-layers";
-
-		num_layer {
-			if-layers = <SYM NAV>;
-			then-layer = <NUM>;
-		};
-	};
-
-	// Exactly three combos, one per letter the base layout drops, each
-	// confined to a single hand so the opposite hand's home-row mod can
-	// reach it (⌘Z, ⌘X, ⌘V). G, J, M and K form no bigram in English,
-	// Spanish or Python.
 	combos {
 		compatible = "zmk,combos";
 
+		// Both outer thumbs together. They are pure &mo holds, so this
+		// route to the digits involves no tap-versus-hold resolution
+		// anywhere and is never gated by require-prior-idle-ms. The
+		// cost is that both keys must land within the timeout; widen to
+		// 60-70 ms if it misses. There is no false-positive risk, since
+		// both outer thumbs are never pressed together for anything
+		// else.
+		cb_num {
+			timeout-ms = <50>;
+			key-positions = <30 33>;
+			bindings = <&mo NUMBER>;
+			layers = <ALPHA>;
+		};
+
+		// Exactly three letter combos, one per letter the base layout
+		// drops, each confined to a single hand so the opposite hand's
+		// home-row mod can reach it (⌘Z, ⌘X, ⌘V). G, J, M and K form no
+		// bigram in English, Spanish or Python.
 		cb_v {
 			timeout-ms = <40>;
 			key-positions = <22 23>;   // G + J
 			bindings = <&kp V>;
-			layers = <BASE>;
+			layers = <ALPHA>;
 		};
 
 		// Tighter than the others: position 21 is the double quote, and
@@ -115,14 +129,14 @@
 			timeout-ms = <30>;
 			key-positions = <21 22>;   // " + G
 			bindings = <&kp X>;
-			layers = <BASE>;
+			layers = <ALPHA>;
 		};
 
 		cb_z {
 			timeout-ms = <40>;
 			key-positions = <26 27>;   // M + K
 			bindings = <&kp Z>;
-			layers = <BASE>;
+			layers = <ALPHA>;
 		};
 	};
 
@@ -133,85 +147,132 @@
 		// double-quoted Python strings. Home-row mods pinky-to-index:
 		// ⌥ ⇧ ⌃ ⌘, mirrored.
 		//
-		// The thumb row is two rules. Inner thumbs hold NAV and tap
-		// their own character; outer thumbs hold SYM. Either thumb of a
-		// pair gives the whole layer on both hands, so the choice is
-		// about which hand you would rather leave free. Escape and
-		// Enter are not here — they live on NAV.
-		base_layer {
-			display-name = "Base";
+		// Inner thumbs hold EDIT and tap their own character; outer
+		// thumbs hold SYMBOL. The outer thumbs are pure holds with no
+		// tap value, deliberately: a plain &mo engages instantly with
+		// no timing decision, which is what makes SYMBOL the fastest
+		// layer to reach. Escape and Enter are not here — they live on
+		// EDIT.
+		alpha_layer {
+			display-name = "Alpha";
 			bindings = <
 			&kp Y        &kp C         &kp COMMA     &kp F        &kp EQUAL       &kp UNDER  &kp L        &kp DOT       &kp U         &kp Q
 			&hml LALT O  &hml LSHFT S  &hml LCTRL I  &hml LGUI N  &kp P           &kp D      &hmr RGUI T  &hmr RCTRL H  &hmr RSHFT A  &hmr RALT R
 			&kp SQT      &kp DQT       &kp G         &kp J        &kp B           &kp W      &kp M        &kp K         &kp LPAR      &kp RPAR
-			                                    &mo SYM  &tlt NAV E              &tlt NAV SPACE  &mo SYM
+			                                &mo SYMBOL  &elt EDIT E          &elt EDIT SPACE  &mo SYMBOL
 			>;
 		};
 
-		// Hold either outer thumb. = at 4 and _ at 5 match base and
-		// NUM, so !=, +=, >=, <= never leave this layer. Bracket pairs
-		// stack in the right middle and ring columns. ¡ and ¿ are macOS
-		// Option sequences — macOS only. Positions 24 and 25 are free;
-		// ñ is the macOS Option dead key: hold right ⌥ (19), tap N,
-		// release, tap N again.
+		// Hold either outer thumb. = at 4 and _ at 5 match ALPHA and
+		// NUMBER, so !=, +=, >=, <= never leave this layer. Bracket
+		// pairs stack in the right middle and ring columns. ¡ and ¿ are
+		// macOS Option sequences — macOS only. Positions 24 and 25 are
+		// free; ñ is the macOS Option dead key: hold right ⌥ (19), tap
+		// N, release, tap N again.
 		//
-		// The thumb row is fully transparent. The inner thumbs falling
-		// through to base's &tlt NAV is what lets SYM + NAV produce NUM.
-		sym_layer {
-			display-name = "Sym";
+		// The inner thumbs carrying &mo OS is half of what makes the OS
+		// layer reachable in either order.
+		symbol_layer {
+			display-name = "Symbol";
 			bindings = <
 			&kp HASH   &kp LA(N1)         &kp EXCL   &kp MINUS  &kp EQUAL       &kp UNDER  &kp AMPS   &kp LBKT  &kp RBKT  &kp CARET
 			&kp COLON  &kp LA(LS(FSLH))   &kp QMARK  &kp PLUS   &kp PRCNT       &kp GRAVE  &kp TILDE  &kp LBRC  &kp RBRC  &kp SEMI
 			&kp DLLR   &kp BSLH           &kp FSLH   &kp ASTRK  &none           &none      &kp PIPE   &kp LT    &kp GT    &kp AT
-			                                     &trans  &trans                     &trans  &trans
+			                                    &trans  &mo OS                       &mo OS  &trans
 			>;
 		};
 
 		// Hold either inner thumb. One rule: the left hand deletes, the
-		// right hand moves. The editing keys mirror across the two
-		// index columns — 13/16 are Backspace and Enter, 14/15 are
-		// delete-word and Tab, 4/5 are Del and Esc.
+		// right hand moves. Four mirrored pairs across the centreline —
+		// 13/16 Backspace and Enter, 14/15 delete-word and Tab, 4/5 Del
+		// and Esc, 24/25 caps-word and caps-lock (the same idea at two
+		// scales, one auto-ending after a word, one sustained).
 		//
-		// 10-12 and 17-19 are &trans on purpose: they resolve to base's
-		// hml / hmr, so every modifier keeps the exact position and
-		// behavior it has on base. ⌘ is therefore unavailable here — it
-		// sits on the index, which is where Backspace and Enter now
-		// are. For ⌘⏎ or ⌘⌫, hold ⌘ on base first, then the nav thumb;
-		// a held modifier persists through a layer change.
+		// Modifiers are bound explicitly, not &trans. &trans would
+		// resolve to ALPHA's hml / hmr hold-taps, which carry a 280 ms
+		// tapping term and a cross-hand positional restriction. On this
+		// layer that means ⇧ plus a left-hand key — ⇧⌫ for instance —
+		// is same-hand, fails the restriction, resolves as a tap, and
+		// types the letter S into your document. Plain keycodes have no
+		// such failure. The R variants match ALPHA exactly, so anything
+		// that distinguishes left from right behaves the same on both.
 		//
-		// Top-right row is ⌘ plus the arrow directly beneath it: line
-		// start, document end, document start, line end — same finger,
-		// larger jump. Caps Word at 25 is on the right because the left
-		// hand is deletion only. The empty left top and bottom rows are
-		// deliberate: movement stays on one hand as one coherent set.
-		nav_layer {
-			display-name = "Nav";
+		// ⌘ is absent here and that is expected: it lives on the index
+		// on both hands, which is where Backspace and Enter now are.
+		// For ⌘⏎ or ⌘⌫, hold ⌘ on ALPHA first, then the thumb — a held
+		// modifier persists through a layer change.
+		//
+		// Arrows on the right bottom row only; ⇧+arrow and ⌥+arrow work
+		// cross-hand from the left. The empty left top and bottom rows
+		// are deliberate: movement stays on one hand as one coherent
+		// set, since splitting it would give two motor patterns for one
+		// direction.
+		edit_layer {
+			display-name = "Edit";
 			bindings = <
-			&none      &none      &none      &none      &kp DEL          &kp ESC     &kp LG(LEFT)  &kp LG(DOWN)  &kp LG(UP)  &kp LG(RIGHT)
-			&trans     &trans     &trans     &kp BSPC   &kp LA(BSPC)     &kp TAB     &kp RET       &trans        &trans      &trans
-			&none      &none      &none      &none      &none            &caps_word  &kp LEFT      &kp DOWN      &kp UP      &kp RIGHT
-			                                     &trans  &trans                          &trans  &trans
+			&none      &none      &none      &none      &kp DEL          &kp ESC   &none     &none      &none      &none
+			&kp LALT   &kp LSHFT  &kp LCTRL  &kp BSPC   &kp LA(BSPC)     &kp TAB   &kp RET   &kp RCTRL  &kp RSHFT  &kp RALT
+			&none      &none      &none      &none      &caps_word       &kp CAPS  &kp LEFT  &kp DOWN   &kp UP     &kp RIGHT
+			                                    &mo OS  &trans                        &trans  &mo OS
 			>;
 		};
 
-		// Reached by holding one inner thumb and one outer thumb.
+		// Reached by the cb_num combo — both outer thumbs together.
 		// Numpad on the right hand, so digits are pure cross-hand.
-		// Parens live here because base 28 and 29 are 3 and . on this
-		// layer. &tog NUM at 14 latches for sustained numeric entry —
-		// same key releases it. Modifiers are bound explicitly, never
-		// &trans: &trans falls through to the next active layer, not to
-		// base.
+		// Parens live here because ALPHA 28 and 29 are 3 and . on this
+		// layer.
 		//
-		// Position 15 is &none, not Enter: Enter lives at NAV 16 and
-		// nowhere else. To press it mid-entry, release the outer thumb
-		// and you drop to NAV, where it is under your right index.
-		num_layer {
-			display-name = "Num";
+		// No modifiers: they only replicated what ALPHA already
+		// provides. Hold ⌘ on ALPHA before entering for ⌘1-⌘9.
+		// Operators sit on the home row where the modifiers used to be,
+		// so both hands stay on home during arithmetic — 4 5 6 under
+		// the right fingers, - + * under the left. % and / take the
+		// pinky and inner-index stretches because they are used least.
+		//
+		// &tog NUMBER at position 0 latches the layer for sustained
+		// entry; tap again to release. It is the only non-momentary
+		// thing in the keymap and cannot strand you, since its
+		// off-switch is the same key.
+		//
+		// Position 15 is &none, not Enter: Enter lives at EDIT 16 and
+		// nowhere else. To press it mid-entry, release an outer thumb
+		// and you drop to EDIT, where it is under your right index.
+		number_layer {
+			display-name = "Number";
 			bindings = <
-			&none       &none      &kp LPAR   &kp RPAR  &kp EQUAL       &kp UNDER  &kp N7  &kp N8  &kp N9  &out OUT_TOG
-			&kp LALT    &kp LSHFT  &kp LCTRL  &kp LGUI  &tog NUM        &none      &kp N4  &kp N5  &kp N6  &kp COMMA
-			&kp PRCNT   &kp ASTRK  &kp MINUS  &kp PLUS  &kp FSLH        &kp N0     &kp N1  &kp N2  &kp N3  &kp DOT
-			                             &trans  &trans                     &trans  &trans
+			&tog NUMBER  &none      &kp LPAR   &kp RPAR  &kp EQUAL       &kp UNDER  &kp N7  &kp N8  &kp N9  &out OUT_TOG
+			&kp PRCNT    &kp ASTRK  &kp MINUS  &kp PLUS  &kp FSLH        &none      &kp N4  &kp N5  &kp N6  &kp COMMA
+			&none        &none      &none      &none     &none           &kp N0     &kp N1  &kp N2  &kp N3  &kp DOT
+			                                   &trans  &trans                  &trans  &trans
+			>;
+		};
+
+		// Reached by holding one inner thumb and one outer thumb, in
+		// either order.
+		//
+		// Right home row is spaces and overview: macOS gives ⌃← / ⌃→
+		// for adjacent spaces, ⌃↑ for Mission Control and ⌃↓ for App
+		// Exposé — four functions that are already exactly an arrow
+		// cluster, landing on hjkl fingers. Right top row jumps to a
+		// numbered desktop; these are off by default in macOS (System
+		// Settings → Keyboard → Keyboard Shortcuts → Mission Control,
+		// tick "Switch to Desktop N").
+		//
+		// Left home row is apps and windows: ⌃⌘F fullscreen, ⌘` cycles
+		// windows within the current app, ⌘⇥ toggles to the previous
+		// app. ⌘⇥ as a single press cannot cycle further — that needs
+		// the key held.
+		//
+		// Everything else is deliberately empty. ⌘W, ⌘Q, ⌘M, ⌘H and
+		// ⌘Space are all a modifier plus an ALPHA letter, already easy
+		// cross-hand.
+		os_layer {
+			display-name = "OS";
+			bindings = <
+			&none  &none          &none          &none        &none       &none  &kp LC(N1)    &kp LC(N2)    &kp LC(N3)  &kp LC(N4)
+			&none  &kp LC(LG(F))  &kp LG(GRAVE)  &kp LG(TAB)  &none       &none  &kp LC(LEFT)  &kp LC(DOWN)  &kp LC(UP)  &kp LC(RIGHT)
+			&none  &none          &none          &none        &none       &none  &none         &none         &none       &none
+			                                     &trans  &trans                &trans  &trans
 			>;
 		};
 
