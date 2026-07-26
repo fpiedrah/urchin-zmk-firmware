@@ -17,8 +17,8 @@
  * The keymap follows four rules:
  *
  *   1. The thumb row is two rules. Inner thumbs hold EDIT and tap their own
- *      character; outer thumbs hold SYMBOL. One of each gives OS; both outer
- *      together give NUMBER.
+ *      character; outer thumbs hold SYMBOL. One outer plus one inner, opposite
+ *      hands, gives OS; both outer together give NUMBER.
  *   2. Modifiers keep their alpha positions on every layer.
  *   3. Every key lives in exactly one place.
  *   4. Empty positions are deliberate.
@@ -112,6 +112,37 @@
 			layers = <ALPHA>;
 		};
 
+		// One outer thumb plus one inner thumb, opposite hands. Two
+		// chords, one per hand orientation; the same-hand pairs (30+31,
+		// 32+33) are deliberately absent, since a single thumb cannot
+		// hit both cleanly.
+		//
+		// These are a fast path, not the only path: the &mo OS bindings
+		// on the SYMBOL and EDIT thumbs still resolve the same
+		// combination pressed slower than the timeout, so a missed
+		// chord degrades into the sequential route rather than into
+		// nothing.
+		//
+		// The cost is that positions 31 and 32 are now combo positions,
+		// so E and Space are held back until the combo window closes.
+		// The timeout is 40 ms rather than cb_num's 50 for that reason
+		// — it is the delay you feel on every space. Original event
+		// timestamps survive the capture, so the hold-tap's quick-tap
+		// and require-prior-idle windows are unaffected.
+		cb_os_l {
+			timeout-ms = <40>;
+			key-positions = <30 32>;   // left outer + right inner
+			bindings = <&mo OS>;
+			layers = <ALPHA>;
+		};
+
+		cb_os_r {
+			timeout-ms = <40>;
+			key-positions = <31 33>;   // left inner + right outer
+			bindings = <&mo OS>;
+			layers = <ALPHA>;
+		};
+
 		// Exactly three letter combos, one per letter the base layout
 		// drops, each confined to a single hand so the opposite hand's
 		// home-row mod can reach it (⌘Z, ⌘X, ⌘V). G, J, M and K form no
@@ -170,8 +201,10 @@
 		// free; ñ is the macOS Option dead key: hold right ⌥ (19), tap
 		// N, release, tap N again.
 		//
-		// The inner thumbs carrying &mo OS is half of what makes the OS
-		// layer reachable in either order.
+		// The inner thumbs carrying &mo OS is the sequential fallback
+		// behind the cb_os_* chords: hold an outer thumb long enough
+		// that the combo window has closed, and the opposite inner
+		// thumb still reaches OS from here.
 		symbol_layer {
 			display-name = "Symbol";
 			bindings = <
@@ -247,8 +280,10 @@
 			>;
 		};
 
-		// Reached by holding one inner thumb and one outer thumb, in
-		// either order.
+		// Reached by the cb_os_l / cb_os_r combos — one outer thumb and
+		// one inner thumb on opposite hands, in either order. Press
+		// them slower than the combo window and the &mo OS bindings on
+		// the SYMBOL and EDIT thumbs land you in the same place.
 		//
 		// Right home row is spaces and overview: macOS gives ⌃← / ⌃→
 		// for adjacent spaces, ⌃↑ for Mission Control and ⌃↓ for App
